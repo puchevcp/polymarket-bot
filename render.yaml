@@ -1,11 +1,21 @@
 services:
-  - type: worker
+  - type: web
     name: polymarket-bot
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python scanner.py
+    startCommand: python main.py
     envVars:
       - key: TELEGRAM_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: RENDER_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: GOOGLE_SHEETS_CREDS
         sync: false
