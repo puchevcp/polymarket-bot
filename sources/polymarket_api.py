@@ -1,6 +1,7 @@
 import requests
 import logging
 import time
+import json
 from typing import List, Optional
 from models import Market
 import config
@@ -42,8 +43,15 @@ class PolymarketAPI:
                     try:
                         prices = m.get("outcomePrices")
                         if not prices: continue
+                        
+                        # Si llega como string (JSON stringificado), lo parseamos
+                        if isinstance(prices, str):
+                            try:
+                                prices = json.loads(prices)
+                            except:
+                                continue
                             
-                        # Handle list, dict or unexpected types
+                        # Handle list, dict o tipos inesperados
                         if isinstance(prices, list) and len(prices) >= 2:
                             yes = float(prices[0])
                             no = float(prices[1])
@@ -51,7 +59,7 @@ class PolymarketAPI:
                             yes = float(prices.get("Yes", prices.get("yes", 0.5)))
                             no = float(prices.get("No", prices.get("no", 0.5)))
                         else:
-                            log.warning(f"Unexpected price format for market {m.get('id')}: {type(prices)}")
+                            log.warning(f"Unexpected price format for market {m.get('id')}: {type(prices)} | Content: {prices}")
                             continue
                         
                         vol = float(m.get("volume", 0) or 0)
@@ -59,11 +67,18 @@ class PolymarketAPI:
                         if vol < config.MIN_VOLUME:
                             continue
                             
-                        # Polymarket usually returns string '[]' or '["token_id_yes", "token_id_no"]'
+                        # Mismo manejo para clobTokenIds
+                        clob_ids_raw = m.get("clobTokenIds")
+                        if isinstance(clob_ids_raw, str):
+                            try:
+                                clob_ids_raw = json.loads(clob_ids_raw)
+                            except:
+                                clob_ids_raw = []
+                                
                         clob_ids = {}
-                        if isinstance(m.get("clobTokenIds"), list) and len(m.get("clobTokenIds")) >= 2:
-                             clob_ids["YES"] = m["clobTokenIds"][0]
-                             clob_ids["NO"] = m["clobTokenIds"][1]
+                        if isinstance(clob_ids_raw, list) and len(clob_ids_raw) >= 2:
+                             clob_ids["YES"] = clob_ids_raw[0]
+                             clob_ids["NO"] = clob_ids_raw[1]
                         
                         markets.append(Market(
                             id=str(m.get("id", "")),
