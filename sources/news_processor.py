@@ -27,7 +27,7 @@ class NewsProcessor:
         
         try:
             response = self.client.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-3-5-haiku-latest",
                 max_tokens=200,
                 system=system_prompt,
                 messages=[{"role": "user", "content": news.text}]
