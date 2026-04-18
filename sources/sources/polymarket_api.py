@@ -26,7 +26,15 @@ class PolymarketAPI:
             
             events_data = r.json()
             for event in events_data:
-                category = event.get("tags", [{}])[0].get("label", "") if event.get("tags") else ""
+                # Extraer categoría de forma robusta
+                tags = event.get("tags", [])
+                category = ""
+                if tags and len(tags) > 0:
+                    first_tag = tags[0]
+                    if isinstance(first_tag, dict):
+                        category = first_tag.get("label", "")
+                    elif isinstance(first_tag, str):
+                        category = first_tag
                 
                 for m in event.get("markets", []):
                     if not m.get("active") or m.get("closed"): continue
