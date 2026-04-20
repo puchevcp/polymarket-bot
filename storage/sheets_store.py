@@ -25,8 +25,19 @@ class SheetsStore:
             
             # Authenticate with gspread
             self.client = gspread.service_account_from_dict(creds_dict)
-            self.spreadsheet = self.client.open(spreadsheet_name)
-            log.info(f"Connected to Google Sheets: {spreadsheet_name}")
+            log.info(f"Opening spreadsheet: '{spreadsheet_name}'...")
+            try:
+                self.spreadsheet = self.client.open(spreadsheet_name)
+            except gspread.SpreadsheetNotFound:
+                log.error(f"Spreadsheet '{spreadsheet_name}' NOT FOUND. Make sure you created it and shared it with {creds_dict.get('client_email')}")
+                self.client = None
+                return
+            except Exception as e:
+                log.error(f"Unexpected error opening spreadsheet: {e}")
+                self.client = None
+                return
+                
+            log.info(f"Successfully connected to Google Sheets: {spreadsheet_name}")
             
             # Ensure worksheets exist
             self._ensure_worksheet("Paper Trades", ["timestamp", "market", "market_id", "strategy", "direction", "entry_price", "estimate", "gap_pct", "confidence", "reason", "status", "exit_price", "pnl"])
@@ -35,7 +46,7 @@ class SheetsStore:
             self._ensure_worksheet("Strategy Performance", ["strategy", "trades", "wins", "losses", "pnl"])
             
         except Exception as e:
-            log.error(f"Failed to initialize SheetsStore: {e}")
+            log.error(f"CRITICAL: Failed to initialize SheetsStore logic: {e}")
             self.client = None
             
     def _ensure_worksheet(self, title: str, headers: List[str]):
