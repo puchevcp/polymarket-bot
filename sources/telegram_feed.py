@@ -15,7 +15,8 @@ class TelegramNewsMonitor:
         self.on_news = on_news
         self.enabled = bool(self.api_id and self.api_hash)
         
-        self.target_channels = ['Cointelegraph', 'WatcherGuru', 'unusual_whales', 'DeItaone']
+        # Handles comprobados: WatcherGuru, unusual_whales, Deltaone, Cointelegraph
+        self.target_channels = ['Cointelegraph', 'WatcherGuru', 'unusual_whales', 'Deltaone']
         
     async def _start_client(self):
         if not self.enabled:
@@ -24,19 +25,26 @@ class TelegramNewsMonitor:
             
         client = TelegramClient('news_monitor', int(self.api_id), self.api_hash)
         
+        async def safe_handler(event):
+            try:
+                text = event.raw_text
+                if not text or len(text) < 10: return
+                    
+                chat = await event.get_chat()
+                log.info(f"New Telegram news from {getattr(chat, 'title', 'Unknown')}")
+                
+                news = NewsItem(
+                    source=f"Telegram ({getattr(chat, 'title', 'Channel')})",
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    text=text,
+                )
+                self.on_news(news)
+            except Exception as e:
+                log.error(f"Error handling telegram event: {e}")
+
         @client.on(events.NewMessage(chats=self.target_channels))
         async def handler(event):
-            text = event.raw_text
-            if not text or len(text) < 10: return
-                
-            chat = await event.get_chat()
-            
-            news = NewsItem(
-                source=f"Telegram ({chat.title})",
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                text=text,
-            )
-            self.on_news(news)
+            await safe_handler(event)
 
         # Usamos el token de bot directamente, ya que un bot puede monitorear canales públicos
         # a los que ha sido añadido o algunos públicos, pero telethon en bot_token

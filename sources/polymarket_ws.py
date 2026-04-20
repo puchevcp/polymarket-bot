@@ -43,6 +43,8 @@ class PolymarketWebSocket:
                 log.error(f"Failed to subscribe to WS: {e}")
 
     def _on_message(self, ws, message):
+        if not message or not isinstance(message, str):
+            return
         try:
             data = json.loads(message)
             if isinstance(data, list):
