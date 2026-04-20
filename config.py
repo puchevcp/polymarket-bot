@@ -13,12 +13,12 @@ TELEGRAM_API_HASH = os.environ.get("TELEGRAM_API_HASH", "")
 GOOGLE_SHEETS_CREDS = os.environ.get("GOOGLE_SHEETS_CREDS", "")
 
 GAMMA_API = "https://gamma-api.polymarket.com"
-MAX_MARKETS = 150
-MIN_VOLUME = 1000
+MAX_MARKETS = 200
+MIN_VOLUME = 500
 SCAN_INTERVAL_SEC = 30
-ALERT_COOLDOWN_SEC = 3600
+ALERT_COOLDOWN_SEC = 1800  # 30 min cooldown (was 1 hour)
 
-# Strategy weights
+# Strategy weights (used in combiner scoring)
 WEIGHT_MISPRICING = 0.10
 WEIGHT_NEWS_ALPHA = 0.35
 WEIGHT_VOLUME_SPIKE = 0.20
@@ -26,7 +26,10 @@ WEIGHT_EARLY_MOVER = 0.15
 WEIGHT_RESOLUTION = 0.10
 WEIGHT_CROSS_MARKET = 0.10
 
-MIN_SIGNAL_CONFIDENCE = 0.30
+# CRITICAL: This is the MINIMUM combined score to trigger an alert.
+# A single strategy with confidence=0.7 and weight=0.10 scores 0.07.
+# So we need this to be LOW enough for individual strategies to trigger.
+MIN_SIGNAL_CONFIDENCE = 0.04
 
 def validate_config():
     missing = []
