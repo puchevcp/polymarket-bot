@@ -17,6 +17,7 @@ class StrategyCombiner:
                 signal = strategy.analyze(market, context)
                 if signal:
                     signals.append(signal)
+                    log.info(f"  ✅ {strategy.name} triggered for '{market.question[:60]}' | conf={signal.confidence:.2f} | dir={signal.direction}")
             except Exception as e:
                 log.error(f"Error in strategy {strategy.name}: {e}")
                 
@@ -41,6 +42,8 @@ class StrategyCombiner:
         # Resolve conflict: calculate net score
         net_score = abs(yes_score - no_score)
         direction = "BUY_YES" if yes_score > no_score else "BUY_NO"
+        
+        log.info(f"  📊 Combined score for '{market.question[:50]}': YES={yes_score:.3f} NO={no_score:.3f} net={net_score:.3f} (threshold={config.MIN_SIGNAL_CONFIDENCE})")
         
         if net_score < config.MIN_SIGNAL_CONFIDENCE:
             return None

@@ -18,21 +18,21 @@ class EarlyMoverStrategy(Strategy):
         except ValueError:
             return None
             
-        if hours_alive > 4:
+        if hours_alive > 12:  # Expanded from 4h to 12h
             return None 
             
-        # Simplified: Check early markets that might be a 50/50 toss-up 
-        # Future improvement: Combine strongly with news NLP
         yes = market.yes_price
         
-        if 0.45 < yes < 0.55 and market.volume > config.MIN_VOLUME:
+        # Wider band: detect any new market not yet settled
+        if 0.30 < yes < 0.70 and market.volume > config.MIN_VOLUME:
+             confidence = 0.5 + (0.5 - abs(yes - 0.5))  # Closer to 50/50 = higher confidence
              return Signal(
                  strategy_name=self.name,
                  market_id=market.id,
-                 direction="BUY_YES",
-                 confidence=0.4, # Low confidence without news, but highlights new active market
+                 direction="BUY_YES" if yes < 0.50 else "BUY_NO",
+                 confidence=min(confidence, 0.8),
                  weight=self.weight,
-                 reason=f"New market (<4h old) with good volume. Need News correlation to confirm.",
-                 target_price=0.6
+                 reason=f"New market ({hours_alive:.1f}h old), price still forming at YES={yes:.2f}",
+                 target_price=0.65 if yes < 0.50 else 0.35
              )
         return None
