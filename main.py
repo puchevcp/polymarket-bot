@@ -26,6 +26,49 @@ import web
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 log = logging.getLogger("main")
 
+def resolution_checker_loop(store: SheetsStore, api: PolymarketAPI):
+    """Background task to check status of open paper trades every hour."""
+    while True:
+        try:
+            log.info("Checking resolution for open paper trades...")
+            open_trades = store.get_open_trades()
+            if not open_trades:
+                log.info("No open trades to check.")
+            else:
+                for row_idx, trade in open_trades:
+                    market_id = str(trade.get("market_id"))
+                    if not market_id: continue
+                    
+                    try:
+                        r = api.session.get(f"{config.GAMMA_API}/markets/{market_id}", timeout=10)
+                        if r.status_code == 200:
+                            data = r.json()
+                            if data.get("closed") or data.get("resolved"):
+                                prices = data.get("outcomePrices", ["0", "0"])
+                                yes_final = float(prices[0])
+                                
+                                entry_price = float(trade.get("entry_price", 0.5))
+                                direction = trade.get("direction")
+                                
+                                win = (direction == "BUY_YES" and yes_final > 0.99) or \
+                                      (direction == "BUY_NO" and yes_final < 0.01)
+                                
+                                exit_price = 1.0 if win else 0.0
+                                pnl = exit_price - entry_price
+                                
+                                store.update_trade_outcome(row_idx, exit_price, pnl)
+                        elif r.status_code == 404:
+                            log.warning(f"Market {market_id} not found (archived?)")
+                    except Exception as e:
+                        log.error(f"Error checking market {market_id}: {e}")
+                
+                store.refresh_performance_dashboard()
+                
+        except Exception as e:
+            log.error(f"Resolution checker error: {e}")
+            
+        time.sleep(3600) # Wait 1 hour
+
 def main():
     log.info("Starting Polymarket Multi-Strategy Bot...")
     config.validate_config()
@@ -64,7 +107,10 @@ def main():
     web.stats["started_at"] = datetime.now(timezone.utc).isoformat()
     threading.Thread(target=web.start_server, daemon=True).start()
     
-    alerted_markets = {}
+    # Start the resolution checker
+    threading.Thread(target=resolution_checker_loop, args=(store, api), daemon=True).start()
+    
+    alert_cooldowns = {}
     
     while True:
         try:
@@ -79,11 +125,16 @@ def main():
                 ws_client.subscribe(token_ids)
                 
             for market in markets:
-                if market.id in alerted_markets and (time.time() - alerted_markets[market.id]) < config.ALERT_COOLDOWN_SEC:
-                    continue
-                    
+                # Better dedup key using question + base token
+                dedup_key = f"{market.question}_{market.clob_token_ids.get('YES', market.id)}"
+                
                 signal = combiner.evaluate_market(market, context)
                 if signal:
+                    # Cooldown check including direction
+                    final_key = f"{dedup_key}_{signal.direction}"
+                    if final_key in alert_cooldowns and (time.time() - alert_cooldowns[final_key]) < config.ALERT_COOLDOWN_SEC:
+                        continue
+                        
                     msg = Formatter.format_signal(signal, market)
                     alert_sender.send_alert(msg)
                     
@@ -104,7 +155,7 @@ def main():
                     
                     web.paper_trades_ref.append(trade)
                     web.stats["total_alerts"] += 1
-                    alerted_markets[market.id] = time.time()
+                    alert_cooldowns[final_key] = time.time()
                     
         except Exception as e:
              log.error(f"Scanner loop error: {e}")
