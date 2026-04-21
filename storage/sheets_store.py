@@ -84,3 +84,64 @@ class SheetsStore:
             ws.append_row([news.timestamp, news.source, news.text, news.sentiment, markets_affected])
         except Exception as e:
             log.error(f"Error logging news: {e}")
+
+    def get_open_trades(self):
+        """Returns a list of (row_index, trade_data) for trades without a result."""
+        if not self.client: return []
+        try:
+            ws = self.spreadsheet.worksheet("Paper Trades")
+            records = ws.get_all_records()
+            open_trades = []
+            for i, row in enumerate(records):
+                if not row.get("exit_price"):
+                    # +2 because spreadsheet is 1-indexed and has header row
+                    open_trades.append((i + 2, row))
+            return open_trades
+        except Exception as e:
+            log.error(f"Error reading open trades: {e}")
+            return []
+
+    def update_trade_outcome(self, row_index: int, exit_price: float, pnl: float):
+        """Updates a specific trade row with the final result."""
+        if not self.client: return
+        try:
+            ws = self.spreadsheet.worksheet("Paper Trades")
+            # Columns: K=Status (11), L=ExitPrice (12), M=PnL (13)
+            ws.update_cell(row_index, 11, "CLOSED")
+            ws.update_cell(row_index, 12, exit_price)
+            ws.update_cell(row_index, 13, pnl)
+            log.info(f"Updated trade at row {row_index} with P&L: {pnl}")
+        except Exception as e:
+            log.error(f"Error updating trade outcome: {e}")
+
+    def refresh_performance_dashboard(self):
+        """Aggregates all results and updates the 'Strategy Performance' sheet."""
+        if not self.client: return
+        try:
+            ws_trades = self.spreadsheet.worksheet("Paper Trades")
+            records = ws_trades.get_all_records()
+            
+            perf = {} # strategy -> {trades, wins, losses, pnl}
+            for row in records:
+                s_name = row.get("strategy", "Unknown")
+                pnl = row.get("pnl")
+                if pnl == "" or pnl is None: continue
+                
+                pnl_val = float(pnl)
+                if s_name not in perf:
+                    perf[s_name] = {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0}
+                
+                perf[s_name]["trades"] += 1
+                perf[s_name]["pnl"] += pnl_val
+                if pnl_val > 0: perf[s_name]["wins"] += 1
+                else: perf[s_name]["losses"] += 1
+                
+            ws_perf = self.spreadsheet.worksheet("Strategy Performance")
+            ws_perf.clear()
+            ws_perf.append_row(["strategy", "trades", "wins", "losses", "pnl"])
+            for s, data in perf.items():
+                ws_perf.append_row([s, data["trades"], data["wins"], data["losses"], round(data["pnl"], 4)])
+            
+            log.info("Refreshed strategy performance dashboard.")
+        except Exception as e:
+            log.error(f"Error refreshing performance dashboard: {e}")
