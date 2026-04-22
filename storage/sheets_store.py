@@ -93,7 +93,7 @@ class SheetsStore:
             records = ws.get_all_records()
             open_trades = []
             for i, row in enumerate(records):
-                if not row.get("exit_price"):
+                if row.get("status", "") != "CLOSED":
                     # +2 because spreadsheet is 1-indexed and has header row
                     open_trades.append((i + 2, row))
             return open_trades
@@ -101,47 +101,53 @@ class SheetsStore:
             log.error(f"Error reading open trades: {e}")
             return []
 
-    def update_trade_outcome(self, row_index: int, exit_price: float, pnl: float):
-        """Updates a specific trade row with the final result."""
+    def update_trade_outcome(self, row_index: int, exit_price: float, pnl: float, status: str = "CLOSED"):
+        """Updates a specific trade row with the final or unrealized result."""
         if not self.client: return
         try:
             ws = self.spreadsheet.worksheet("Paper Trades")
-            # Columns: K=Status (11), L=ExitPrice (12), M=PnL (13)
-            ws.update_cell(row_index, 11, "CLOSED")
-            ws.update_cell(row_index, 12, exit_price)
-            ws.update_cell(row_index, 13, pnl)
-            log.info(f"Updated trade at row {row_index} with P&L: {pnl}")
+            # Columns: K=11, L=12, M=13
+            # We use a single update request to avoid API rate limits (60/min)
+            ws.update(values=[[status, exit_price, pnl]], range_name=f"K{row_index}:M{row_index}")
+            log.info(f"Updated trade at row {row_index} with Status: {status}, P&L: {pnl}")
         except Exception as e:
             log.error(f"Error updating trade outcome: {e}")
 
     def refresh_performance_dashboard(self):
-        """Aggregates all results and updates the 'Strategy Performance' sheet."""
+        """Aggregates all results and updates the 'Strategy Performance' sheet (including Unrealized PNL)."""
         if not self.client: return
         try:
             ws_trades = self.spreadsheet.worksheet("Paper Trades")
             records = ws_trades.get_all_records()
             
-            perf = {} # strategy -> {trades, wins, losses, pnl}
+            perf = {} # strategy -> {trades, wins, losses, realized_pnl, unrealized_pnl}
             for row in records:
                 s_name = row.get("strategy", "Unknown")
                 pnl = row.get("pnl")
+                status = row.get("status", "OPEN")
                 if pnl == "" or pnl is None: continue
                 
                 pnl_val = float(pnl)
                 if s_name not in perf:
-                    perf[s_name] = {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0}
+                    perf[s_name] = {"trades": 0, "wins": 0, "losses": 0, "realized_pnl": 0.0, "unrealized_pnl": 0.0}
                 
                 perf[s_name]["trades"] += 1
-                perf[s_name]["pnl"] += pnl_val
-                if pnl_val > 0: perf[s_name]["wins"] += 1
-                else: perf[s_name]["losses"] += 1
+                if status == "CLOSED":
+                    perf[s_name]["realized_pnl"] += pnl_val
+                    if pnl_val > 0: perf[s_name]["wins"] += 1
+                    else: perf[s_name]["losses"] += 1
+                else:
+                    perf[s_name]["unrealized_pnl"] += pnl_val
                 
             ws_perf = self.spreadsheet.worksheet("Strategy Performance")
             ws_perf.clear()
-            ws_perf.append_row(["strategy", "trades", "wins", "losses", "pnl"])
+            ws_perf.append_row(["strategy", "trades", "wins", "losses", "realized_pnl", "unrealized_pnl"])
             for s, data in perf.items():
-                ws_perf.append_row([s, data["trades"], data["wins"], data["losses"], round(data["pnl"], 4)])
+                ws_perf.append_row([
+                    s, data["trades"], data["wins"], data["losses"], 
+                    round(data["realized_pnl"], 4), round(data["unrealized_pnl"], 4)
+                ])
             
-            log.info("Refreshed strategy performance dashboard.")
+            log.info("Refreshed strategy performance dashboard with Unrealized PNL.")
         except Exception as e:
             log.error(f"Error refreshing performance dashboard: {e}")
