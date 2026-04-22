@@ -43,20 +43,33 @@ def resolution_checker_loop(store: SheetsStore, api: PolymarketAPI):
                         r = api.session.get(f"{config.GAMMA_API}/markets/{market_id}", timeout=10)
                         if r.status_code == 200:
                             data = r.json()
-                            if data.get("closed") or data.get("resolved"):
-                                prices = data.get("outcomePrices", ["0", "0"])
-                                yes_final = float(prices[0])
-                                
-                                entry_price = float(trade.get("entry_price", 0.5))
-                                direction = trade.get("direction")
-                                
-                                win = (direction == "BUY_YES" and yes_final > 0.99) or \
-                                      (direction == "BUY_NO" and yes_final < 0.01)
+                            prices = data.get("outcomePrices", ["0", "0"])
+                            yes_current = float(prices[0])
+                            
+                            entry_price = float(trade.get("entry_price", 0.5))
+                            direction = trade.get("direction")
+                            
+                            is_closed = data.get("closed") or data.get("resolved")
+                            
+                            # Calculate realistic USDC capital allocation
+                            # Example: If we invest $50 at $0.10, we buy 500 shares.
+                            shares_bought = config.PAPER_TRADE_SIZE_USDC / entry_price
+                            
+                            if is_closed:
+                                win = (direction == "BUY_YES" and yes_current > 0.99) or \
+                                      (direction == "BUY_NO" and yes_current < 0.01)
                                 
                                 exit_price = 1.0 if win else 0.0
-                                pnl = exit_price - entry_price
+                                gross_return = shares_bought * exit_price
+                                pnl = gross_return - config.PAPER_TRADE_SIZE_USDC
                                 
-                                store.update_trade_outcome(row_idx, exit_price, pnl)
+                                store.update_trade_outcome(row_idx, exit_price, pnl, status="CLOSED")
+                            else:
+                                current_price = yes_current if direction == "BUY_YES" else (1.0 - yes_current)
+                                gross_return = shares_bought * current_price
+                                pnl = gross_return - config.PAPER_TRADE_SIZE_USDC
+                                
+                                store.update_trade_outcome(row_idx, current_price, pnl, status="OPEN")
                         elif r.status_code == 404:
                             log.warning(f"Market {market_id} not found (archived?)")
                     except Exception as e:
