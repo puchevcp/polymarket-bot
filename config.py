@@ -16,7 +16,10 @@ GAMMA_API = "https://gamma-api.polymarket.com"
 MAX_MARKETS = 200
 MIN_VOLUME = 500
 SCAN_INTERVAL_SEC = 30
-ALERT_COOLDOWN_SEC = 1800  # 30 min cooldown (was 1 hour)
+ALERT_COOLDOWN_SEC = 43200  # 12 hours cooldown to avoid spam
+
+# Real-world Capital Simulation
+PAPER_TRADE_SIZE_USDC = 50.0  # Assumes a $2500 portfolio risking 2% ($50) per trade
 
 # Strategy weights (used in combiner scoring)
 WEIGHT_MISPRICING = 0.10
@@ -27,8 +30,6 @@ WEIGHT_RESOLUTION = 0.10
 WEIGHT_CROSS_MARKET = 0.10
 
 # CRITICAL: This is the MINIMUM combined score to trigger an alert.
-# A single strategy with confidence=0.7 and weight=0.10 scores 0.07.
-# So we need this to be LOW enough for individual strategies to trigger.
 MIN_SIGNAL_CONFIDENCE = 0.04
 
 def validate_config():
