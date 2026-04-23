@@ -46,7 +46,10 @@ def resolution_checker_loop(store: SheetsStore, api: PolymarketAPI):
                             prices = data.get("outcomePrices", ["0", "0"])
                             yes_current = float(prices[0])
                             
-                            entry_price = float(trade.get("entry_price", 0.5))
+                            # CRITICAL FIX: Google Sheets returns Spanish locale decimals with commas (e.g., "0,925")
+                            entry_val = str(trade.get("entry_price", "0.5")).replace(",", ".").strip()
+                            entry_price = float(entry_val) if entry_val else 0.5
+                            
                             direction = trade.get("direction")
                             
                             is_closed = data.get("closed") or data.get("resolved")
