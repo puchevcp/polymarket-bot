@@ -36,6 +36,9 @@ def resolution_checker_loop(store: SheetsStore, api: PolymarketAPI):
                 log.info("No open trades to check.")
             else:
                 for row_idx, trade in open_trades:
+                    # Extremely important sleep to avoid exceeding Google Sheets limit of 60 req/min
+                    time.sleep(1.5)
+                    
                     market_id = str(trade.get("market_id"))
                     if not market_id: continue
                     
