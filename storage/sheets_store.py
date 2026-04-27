@@ -107,8 +107,10 @@ class SheetsStore:
         try:
             ws = self.spreadsheet.worksheet("Paper Trades")
             # Columns: K=11, L=12, M=13
-            # We use a single update request to avoid API rate limits (60/min)
-            ws.update(values=[[status, exit_price, pnl]], range_name=f"K{row_index}:M{row_index}")
+            # Using update_cell is 100% immune to gspread version breaking-changes
+            ws.update_cell(row_index, 11, status)
+            ws.update_cell(row_index, 12, exit_price)
+            ws.update_cell(row_index, 13, pnl)
             log.info(f"Updated trade at row {row_index} with Status: {status}, P&L: {pnl}")
         except Exception as e:
             log.error(f"Error updating trade outcome: {e}")
